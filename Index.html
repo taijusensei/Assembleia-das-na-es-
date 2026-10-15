@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Assembleia Mundial - Mapa das Nações</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- jsVectorMap (Biblioteca leve de Mapa Mundi) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jsvectormap/dist/css/jsvectormap.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/jsvectormap/dist/js/jsvectormap.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsvectormap/dist/maps/world.js"></script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700;900&display=swap" rel="stylesheet">
+
+  <style>
+    body { font-family: 'Space Grotesk', sans-serif; background-color: #05070d; overflow-x: hidden; }
+    #world-map { width: 100vw; height: 75vh; }
+    .jvm-container { background-color: transparent !important; }
+    .jvm-tooltip { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 6px 10px; font-family: inherit; font-size: 12px; }
+  </style>
+</head>
+<body class="text-white relative select-none">
+
+  <!-- ========================================== -->
+  <!-- 1. TELA DO VIEWER (PÚBLICA)               -->
+  <!-- ========================================== -->
+
+  <!-- Topo: Estatísticas Globais -->
+  <header class="absolute top-3 left-3 right-3 z-20 flex justify-between items-center pointer-events-none">
+    <div class="bg-black/60 backdrop-blur-md border border-neutral-800 rounded-2xl px-4 py-2 pointer-events-auto">
+      <p class="text-[10px] text-yellow-400 font-bold uppercase tracking-widest leading-none">Dominação Global</p>
+      <h1 class="text-lg sm:text-2xl font-black tracking-tight" id="lbl-total-populacao">0 Cidadãos</h1>
+    </div>
+
+    <!-- Botão Secreto do Admin (Cadeado discreto) -->
+    <button id="btn-abrir-admin" class="bg-neutral-900/80 border border-neutral-800 hover:border-yellow-400 text-neutral-400 hover:text-white p-2.5 rounded-2xl transition pointer-events-auto cursor-pointer">
+      🔒
+    </button>
+  </header>
+
+  <!-- O Mapa Mundi Interativo -->
+  <main class="w-full flex items-center justify-center pt-16">
+    <div id="world-map"></div>
+  </main>
+
+  <!-- Barra Inferior: Ranking de Países com Maiores Porcentagens -->
+  <footer class="fixed bottom-0 left-0 right-0 z-20 bg-neutral-950/90 backdrop-blur-xl border-t border-neutral-800/80 p-3">
+    <div class="max-w-4xl mx-auto flex items-center gap-3 overflow-x-auto no-scrollbar py-1" id="ranking-container">
+      <!-- Injetado via JS -->
+    </div>
+  </footer>
+
+  <!-- Gaveta Lateral: Detalhes do País Selecionado -->
+  <div id="modal-pais" class="fixed inset-y-0 right-0 w-full sm:w-96 bg-neutral-950/95 backdrop-blur-2xl border-l border-neutral-800 z-50 transform translate-x-full transition-transform duration-300 p-5 flex flex-col justify-between">
+    <div>
+      <div class="flex items-center justify-between pb-4 border-b border-neutral-800">
+        <div>
+          <span id="detalhe-bandeira" class="text-3xl">🇧🇷</span>
+          <h2 id="detalhe-nome" class="text-xl font-black mt-1">Brasil</h2>
+        </div>
+        <button id="btn-fechar-modal" class="text-neutral-400 hover:text-white text-2xl font-bold cursor-pointer">✕</button>
+      </div>
+
+      <!-- Barra de Porcentagem -->
+      <div class="mt-4 bg-neutral-900 border border-neutral-800 rounded-xl p-3">
+        <div class="flex justify-between items-center text-xs mb-1">
+          <span class="text-neutral-400 font-semibold">Participação no Planeta</span>
+          <span id="detalhe-pct" class="text-yellow-400 font-black text-sm">0.0%</span>
+        </div>
+        <div class="w-full bg-neutral-800 h-2 rounded-full overflow-hidden">
+          <div id="detalhe-barra" class="bg-yellow-400 h-full rounded-full transition-all duration-500" style="width: 0%"></div>
+        </div>
+        <p id="detalhe-qtd" class="text-[11px] text-neutral-400 mt-2">0 habitantes cadastrados</p>
+      </div>
+
+      <!-- Presidente -->
+      <div class="mt-4">
+        <p class="text-[10px] uppercase font-bold text-neutral-400 tracking-wider">Líder Supremo / Chefe de Estado</p>
+        <div id="detalhe-presidente" class="mt-1 bg-yellow-500/10 border border-yellow-500/40 rounded-xl p-3 flex items-center gap-3">
+          <span class="text-2xl">👑</span>
+          <div>
+            <p class="text-[10px] font-bold text-yellow-400 uppercase">Presidente</p>
+            <p id="detalhe-presidente-user" class="text-sm font-black text-white">Sem presidente</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cidadãos -->
+      <div class="mt-4">
+        <p class="text-[10px] uppercase font-bold text-neutral-400 tracking-wider">Cidadãos do País</p>
+        <div id="detalhe-cidadaos" class="mt-2 flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pr-1">
+          <!-- Lista de @ dos cidadãos -->
+        </div>
+      </div>
+    </div>
+
+    <p class="text-center text-[10px] text-neutral-400 pt-3 border-t border-neutral-800">
+      Comente o país no vídeo para reivindicar cidadania
+    </p>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- 2. PAINEL DE ADMINISTRAÇÃO (SÓ SEU)       -->
+  <!-- ========================================== -->
+  <div id="painel-admin" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-neutral-900 border border-neutral-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl relative">
+      <button id="btn-fechar-admin" class="absolute top-4 right-4 text-neutral-400 hover:text-white text-xl font-bold cursor-pointer">✕</button>
+
+      <!-- Autenticação por Senha -->
+      <div id="admin-login-view">
+        <h3 class="text-lg font-black mb-1">Acesso do Administrador</h3>
+        <p class="text-xs text-neutral-400 mb-4">Digite o seu PIN de controle.</p>
+        <input type="password" id="input-pin" placeholder="PIN de acesso (Padrão: 1234)" class="w-full bg-neutral-950 border border-neutral-700 rounded-xl px-4 py-2.5 text-sm mb-3 focus:outline-none focus:border-yellow-400">
+        <button id="btn-confirmar-pin" class="w-full bg-yellow-400 hover:bg-yellow-300 text-black font-black py-2.5 rounded-xl text-sm transition">Entrar no Painel</button>
+      </div>
+
+      <!-- Área de Controle do Admin -->
+      <div id="admin-control-view" class="hidden space-y-4">
+        <div class="border-b border-neutral-800 pb-3">
+          <h3 class="text-base font-black text-yellow-400">Painel do Criador</h3>
+          <p class="text-xs text-neutral-400">Insira o link do TikTok para ler os comentários automaticamente.</p>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-neutral-300 mb-1">Link do Vídeo do TikTok</label>
+          <input type="url" id="input-tiktok-url" placeholder="https://www.tiktok.com/@user/video/..." class="w-full bg-neutral-950 border border-neutral-700 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-yellow-400 text-white">
+        </div>
+
+        <button id="btn-ler-tiktok" class="w-full bg-yellow-400 hover:bg-yellow-300 text-black font-extrabold py-2.5 rounded-xl text-xs transition flex items-center justify-center gap-2">
+          <span>⚡ Ler Comentários via Link</span>
+        </button>
+
+        <!-- Status / Feedback da Leitura -->
+        <div id="status-leitura" class="text-xs p-2.5 rounded-xl bg-neutral-950 border border-neutral-800 text-neutral-400 hidden"></div>
+
+        <div class="border-t border-neutral-800 pt-3 flex justify-between items-center text-xs">
+          <span class="text-neutral-500">Ações Rápidas</span>
+          <button id="btn-zerar-dados" class="text-red-400 hover:underline">Zerar Todo o Mapa</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- 3. LÓGICA DO MAPA E PROCESSAMENTO         -->
+  <!-- ========================================== -->
+  <script>
+    // Dicionário de Países: ISO 2 -> Nome em Português + Bandeira
+    const PAISES_MAPA = {
+      "BR": { nome: "Brasil", bandeira: "🇧🇷" },
+      "PT": { nome: "Portugal", bandeira: "🇵🇹" },
+      "AO": { nome: "Angola", bandeira: "🇦🇴" },
+      "MZ": { nome: "Moçambique", bandeira: "🇲🇿" },
+      "US": { nome: "Estados Unidos", bandeira: "🇺🇸" },
+      "AR": { nome: "Argentina", bandeira: "🇦🇷" },
+      "FR": { nome: "França", bandeira: "🇫🇷" },
+      "ES": { nome: "Espanha", bandeira: "🇪🇸" },
+      "IT": { nome: "Itália", bandeira: "🇮🇹" },
+      "DE": { nome: "Alemanha", bandeira: "🇩🇪" },
+      "JP": { nome: "Japão", bandeira: "🇯🇵" },
+      "CN": { nome: "China", bandeira: "🇨🇳" },
+      "RU": { nome: "Rússia", bandeira: "🇷🇺" },
+      "CA": { nome: "Canadá", bandeira: "🇨🇦" },
+      "GB": { nome: "Reino Unido", bandeira: "🇬🇧" },
+      "MX": { nome: "México", bandeira: "🇲🇽" },
+      "CO": { nome: "Colômbia", bandeira: "🇨🇴" },
+      "CL": { nome: "Chile", bandeira: "🇨🇱" },
+      "UY": { nome: "Uruguai", bandeira: "🇺🇾" },
+      "PY": { nome: "Paraguai", bandeira: "🇵🇾" },
+      "PE": { nome: "Peru", bandeira: "🇵🇪" },
+      "IN": { nome: "Índia", bandeira: "🇮🇳" },
+      "AU": { nome: "Austrália", bandeira: "🇦🇺" },
+      "ZA": { nome: "África do Sul", bandeira: "🇿🇦" }
+    };
+
+    // Estado da Aplicação
+    let cidadaos = JSON.parse(localStorage.getItem('mapa_mundi_cidadaos')) || [];
+    let mapInstance = null;
+
+    // Normalizador de texto
+    function normalizar(txt) {
+      return txt.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+    }
+
+    // Inicialização do Mapa
+    function initMap() {
+      mapInstance = new jsVectorMap({
+        selector: '#world-map',
+        map: 'world',
+        backgroundColor: 'transparent',
+        draggable: true,
+        zoomButtons: false,
+        zoomOnScroll: true,
+        regionStyle: {
+          initial: { fill: '#172033', stroke: '#05070d', strokeWidth: 0.5, fillOpacity: 1 },
+          hover: { fillOpacity: 0.8, cursor: 'pointer' },
+          selected: { fill: '#facc15' }
+        },
+        onRegionClick: function(event, code) {
+          abrirDetalhesPais(code);
+        },
+        onRegionTooltipShow: function(event, tooltip, code) {
+          const stats = calcularStatsPais(code);
+          const nome = PAISES_MAPA[code]?.nome || code;
+          tooltip.text(`<b>${nome}</b>: ${stats.pct}% (${stats.qtd} cidadãos)`);
+        }
+      });
+
+      atualizarMapaVisual();
+    }
+
+    // Cálculo das Estatísticas e %
+    function calcularStatsPais(code) {
+      const totalGlobal = cidadaos.length;
+      const doPais = cidadaos.filter(c => c.paisCode === code);
+      const qtd = doPais.length;
+      const pct = totalGlobal > 0 ? ((qtd / totalGlobal) * 100).toFixed(1) : "0.0";
+      const presidente = doPais.find(c => c.isLider);
+      return { qtd, pct, presidente, cidadaos: doPais.filter(c => !c.isLider) };
+    }
+
+    // Atualiza as cores do mapa com base nas porcentagens
+    function atualizarMapaVisual() {
+      const totalGlobal = cidadaos.length;
+      document.getElementById('lbl-total-populacao').innerText = `${totalGlobal} Cidadãos`;
+
+      const coresPorPais = {};
+      const ranking = [];
+
+      Object.keys(PAISES_MAPA).forEach(code => {
+        const stats = calcularStatsPais(code);
+        if (stats.qtd > 0) {
+          // Escala de cor: quanto maior a %, mais dourado/vivo
+          if (parseFloat(stats.pct) > 25) coresPorPais[code] = '#facc15'; // Dourado
+          else if (parseFloat(stats.pct) > 10) coresPorPais[code] = '#eab308';
+          else coresPorPais[code] = '#3b82f6'; // Azul ativo
+
+          ranking.push({ code, nome: PAISES_MAPA[code].nome, bandeira: PAISES_MAPA[code].bandeira, pct: parseFloat(stats.pct), qtd: stats.qtd });
+        } else {
+          coresPorPais[code] = '#172033'; // Vazio
+        }
+      });
+
+      if (mapInstance) {
+        mapInstance.visualizeData({
+          scale: ['#3b82f6', '#facc15'],
+          values: coresPorPais
+        });
+      }
+
+      // Atualiza o ranking na barra inferior
+      ranking.sort((a, b) => b.pct - a.pct);
+      const containerRanking = document.getElementById('ranking-container');
+      containerRanking.innerHTML = '';
+
+      if (ranking.length === 0) {
+        containerRanking.innerHTML = `<span class="text-xs text-neutral-500 py-1">Nenhum país com habitantes ainda. O mundo aguarda líderes.</span>`;
+      } else {
+        ranking.forEach((r, idx) => {
+          const pill = document.createElement('div');
+          pill.className = "flex items-center gap-2 bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-1.5 flex-shrink-0 cursor-pointer hover:border-neutral-700 transition";
+          pill.onclick = () => abrirDetalhesPais(r.code);
+          pill.innerHTML = `
+            <span class="text-xs font-black text-yellow-400">#${idx + 1}</span>
+            <span>${r.bandeira}</span>
+            <span class="text-xs font-bold text-neutral-200">${r.nome}</span>
+            <span class="text-xs font-black text-white bg-neutral-800 px-1.5 py-0.5 rounded">${r.pct}%</span>
+          `;
+          containerRanking.appendChild(pill);
+        });
+      }
+    }
+
+    // Modal de Detalhes
+    function abrirDetalhesPais(code) {
+      const info = PAISES_MAPA[code] || { nome: code, bandeira: '🌐' };
+      const stats = calcularStatsPais(code);
+
+      document.getElementById('detalhe-nome').innerText = info.nome;
+      document.getElementById('detalhe-bandeira').innerText = info.bandeira;
+      document.getElementById('detalhe-pct').innerText = `${stats.pct}%`;
+      document.getElementById('detalhe-barra').style.width = `${Math.min(parseFloat(stats.pct), 100)}%`;
+      document.getElementById('detalhe-qtd').innerText = `${stats.qtd} habitantes oficiais`;
+
+      const txtPres = document.getElementById('detalhe-presidente-user');
+      if (stats.presidente) {
+        txtPres.innerText = stats.presidente.user;
+        txtPres.className = "text-sm font-black text-yellow-400";
+      } else {
+        txtPres.innerText = "Sem presidente! Comente para assumir.";
+        txtPres.className = "text-sm font-semibold text-neutral-500";
+      }
+
+      const lista = document.getElementById('detalhe-cidadaos');
+      lista.innerHTML = '';
+      if (stats.cidadaos.length > 0) {
+        stats.cidadaos.forEach(c => {
+          const item = document.createElement('span');
+          item.className = "bg-neutral-900 border border-neutral-800 px-2 py-1 rounded text-xs text-neutral-300";
+          item.innerText = c.user;
+          lista.appendChild(item);
+        });
+      } else {
+        lista.innerHTML = `<span class="text-xs text-neutral-600 italic">Nenhum outro cidadão.</span>`;
+      }
+
+      document.getElementById('modal-pais').classList.remove('translate-x-full');
+    }
+
+    document.getElementById('btn-fechar-modal').onclick = () => {
+      document.getElementById('modal-pais').classList.add('translate-x-full');
+    };
+
+    // ==========================================
+    // SISTEMA DE ADMIN E LEITURA DE COMENTÁRIOS
+    // ==========================================
+    const modalAdmin = document.getElementById('painel-admin');
+    const viewLogin = document.getElementById('admin-login-view');
+    const viewControl = document.getElementById('admin-control-view');
+
+    document.getElementById('btn-abrir-admin').onclick = () => {
+      modalAdmin.classList.remove('hidden');
+    };
+    document.getElementById('btn-fechar-admin').onclick = () => {
+      modalAdmin.classList.add('hidden');
+    };
+
+    document.getElementById('btn-confirmar-pin').onclick = () => {
+      const pin = document.getElementById('input-pin').value;
+      if (pin === "090867") {
+        viewLogin.classList.add('hidden');
+        viewControl.classList.remove('hidden');
+      } else {
+        alert('PIN incorreto!');
+      }
+    };
+
+    // Leitor de Comentários por Link do TikTok (via API TikWM pública)
+    document.getElementById('btn-ler-tiktok').onclick = async () => {
+      const url = document.getElementById('input-tiktok-url').value.trim();
+      const statusBox = document.getElementById('status-leitura');
+      statusBox.classList.remove('hidden');
+      statusBox.innerText = "⏳ Conectando ao vídeo e analisando comentários...";
+
+      if (!url.includes('tiktok.com')) {
+        statusBox.innerText = "❌ Insira um link válido do TikTok!";
+        return;
+      }
+
+      try {
+        // Chamada direta à API aberta de comentários do TikTok
+        const response = await fetch(`https://www.tikwm.com/api/comment/list?url=${encodeURIComponent(url)}&count=50`);
+        const data = await response.json();
+
+        if (data.code === 0 && data.data && data.data.comments) {
+          const comments = data.data.comments;
+          let novos = 0;
+
+          comments.forEach(c => {
+            const texto = c.text;
+            const autor = '@' + c.user.unique_id;
+
+            // Procura qual país o usuário digitou
+            for (const [code, info] of Object.entries(PAISES_MAPA)) {
+              if (normalizar(texto).includes(normalizar(info.nome)) || texto.includes(info.bandeira)) {
+                // Checa se o usuário já tem vaga nesse país
+                const existe = cidadaos.some(item => item.user.toLowerCase() === autor.toLowerCase() && item.paisCode === code);
+                if (!existe) {
+                  const ehLider = !cidadaos.some(item => item.paisCode === code && item.isLider);
+                  cidadaos.push({ user: autor, paisCode: code, isLider: ehLider });
+                  novos++;
+                }
+                break;
+              }
+            }
+          });
+
+          localStorage.setItem('mapa_mundi_cidadaos', JSON.stringify(cidadaos));
+          atualizarMapaVisual();
+          statusBox.innerText = `✅ Sucesso! ${novos} novos cidadãos/presidentes registrados a partir do vídeo!`;
+        } else {
+          statusBox.innerText = "⚠️ Nenhum comentário novo encontrado ou o vídeo é privado.";
+        }
+      } catch (err) {
+        statusBox.innerText = "❌ Erro ao ler comentários online. Verifique a URL ou tente novamente.";
+      }
+    };
+
+    // Zerar dados
+    document.getElementById('btn-zerar-dados').onclick = () => {
+      if (confirm('Zerar todas as presidências e cidadãos de volta a 0%?')) {
+        cidadaos = [];
+        localStorage.removeItem('mapa_mundi_cidadaos');
+        atualizarMapaVisual();
+        document.getElementById('modal-pais').classList.add('translate-x-full');
+      }
+    };
+
+    // Inicia ao carregar a página
+    window.onload = initMap;
+  </script>
+</body>
+  </html>
+  
